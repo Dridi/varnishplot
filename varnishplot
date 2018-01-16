@@ -1,0 +1,209 @@
+#!/bin/sh
+#
+# Copyright (C) 2018  Dridi Boukelmoune
+# All rights reserved.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+set -e
+set -u
+
+BACKEND=
+CLIENT=
+GRAPH=
+NINES=
+OUTPUT=
+QUERY='*'
+SIDE=
+VSL_FILE=
+WORK_DIR=
+N_R_OPT=-n
+N_R_ARG=
+
+version() {
+	printf "varnishplot 0.1\n"
+	exit 0
+}
+
+usage() {
+	test $# -eq 1 &&
+	printf 'Error: %s.\n\n' "$1"
+
+	cat <<-EOF
+	Usage: varnishplot [-9 <nines>] [-b|-c] [-g <graph>] [-o <file>]
+	                   [-q <query>] [-n <workdir>|-r <file>]
+	       varnishplot -h
+	       varnishplot -V
+
+	Generate gnuplot graphs based on information found in varnish logs.
+
+	Available options:
+	-h           : show this help and exit
+	-V           : print the version and exit
+	-b           : backend side
+	-c           : client side (default)
+	-g <graph>   : a type of graph
+	-n <workdir> : the name or directory for the varnishd instance
+	-o <file>    : a name for the gnuplot output file
+	-r <file>    : a VSL file written with \`varnishlog -w\`
+	-9 <nines>   : number of nines for percentile graphs (default: 4)
+
+	The -b and -c options are mutually exclusive, and may only work on
+	a subset of the graphs. When irrelevant, these options are ignored.
+
+	The -n and -r options are mutually exclusive. The former operates on
+	a running varnishd instance, the latter reads VSL logs extracted with
+	varnishlog.
+
+	For percentile graphs, the number of nines must be between 3 (99.9%)
+	and 6 (99.9999%).
+
+	Available graphs are:
+
+	- latency (default)
+	EOF
+	exit $#
+}
+
+while getopts Vbcg:hn:o:r:9: OPT
+do
+	case $OPT in
+	V) version ;;
+	b) BACKEND=-b ;;
+	c) CLIENT=-c ;;
+	g) GRAPH=$OPTARG ;;
+	h) usage ;;
+	n) WORK_DIR=$OPTARG ;;
+	o) OUTPUT=$OPTARG ;;
+	q) QUERY=$OPTARG ;;
+	r) VSL_FILE=$OPTARG ;;
+	9) NINES=$OPTARG ;;
+	*) usage "wrong usage" >&2 ;;
+	esac
+done
+
+shift $((OPTIND - 1))
+test $# -gt 1 && usage "too many arguments" >&2
+
+SIDE="$BACKEND$CLIENT"
+SIDE=${SIDE:--c}
+test "$SIDE" = "-b-c" && usage "use either -b or -c, not both"
+
+if [ -n "$WORK_DIR" ] && [ -n "$VSL_FILE" ]
+then
+	usage "use either -n or -r, not both"
+fi
+
+if [ -n "$VSL_FILE" ]
+then
+	N_R_OPT=-r
+	N_R_ARG=$VSL_FILE
+else
+	N_R_ARG=$WORK_DIR
+fi
+
+NINES=${NINES:-4}
+test "$NINES" -eq "$NINES" || usage "invalid number: $NINES"
+test "$NINES" -ge 3 || usage "invalid number of nines: $NINES"
+test "$NINES" -le 6 || usage "invalid number of nines: $NINES"
+
+varnishncsa() {
+	command varnishncsa -d "$N_R_OPT" "$N_R_ARG" -q "$QUERY" "$@"
+}
+
+output() {
+	cat <<-EOF
+	set terminal png size 1280,720
+	set output '$OUTPUT'
+
+	EOF
+}
+
+latency() {
+	output
+
+	values=$(varnishncsa -F '%{VSL:Timestamp:Process[2]}x' | sort)
+	total=$(printf '%s\n' "$values" | wc -l)
+	slowest=$(printf '%s\n' "$values" | tail -n 1)
+
+	printf '%s' "$values" |
+	uniq -c |
+	awk '
+		BEGIN { print "$data <<EOF" }
+		{ sum += $1 }
+		{ print (sum / total) "\t" $2 }
+		END { print "EOF" }
+	' total="$total"
+
+	cat <<-EOF
+
+	set multiplot layout 1,$((NINES + 1))
+	set yrange [0:$slowest]
+	set y2range [0:$slowest]
+	set ytics nomirror
+	set rmargin 0
+	set border 7
+	set grid
+	unset key
+	EOF
+
+	plot_cmd='plot $data with lines lw 3 linecolor rgb "red"'
+
+	head -n "$NINES" <<-EOF |
+	0.0     0.9      90%
+	0.9     0.99     99%
+	0.99    0.999    99.9%
+	0.999   0.9999   99.99%
+	0.9999  0.99999  99.999%
+	0.99999	0.999999 99.9999%
+	EOF
+	{
+		while read -r min max lbl
+		do
+			cat <<-EOF
+
+			set xrange [$min:$max]
+			set xtics ("$lbl%" $max)
+			$plot_cmd
+			set lmargin 0
+			set border 5
+			set ytics scale 0
+			set format y ""
+			EOF
+			last_max=$max
+		done
+
+		cat <<-EOF
+
+		set rmargin -1
+		set border 13
+		set xrange [$last_max:1]
+		set y2tics
+		set xtics (" " 1)
+		$plot_cmd
+
+		unset multiplot
+		EOF
+	}
+	exit
+}
+
+case ${GRAPH:-latency} in
+latency)
+	latency
+	;;
+*)
+	usage "unknown graph: $GRAPH"
+	;;
+esac
