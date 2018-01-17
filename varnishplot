@@ -76,7 +76,7 @@ usage() {
 	exit $#
 }
 
-while getopts Vbcg:hn:o:r:9: OPT
+while getopts Vbcg:hn:o:q:r:9: OPT
 do
 	case $OPT in
 	V) version ;;
