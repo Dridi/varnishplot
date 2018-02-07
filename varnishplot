@@ -133,12 +133,15 @@ output() {
 latency() {
 	output
 
-	values=$(varnishncsa -F '%{VSL:Timestamp:Process[2]}x' | sort)
-	total=$(printf '%s\n' "$values" | wc -l)
-	slowest=$(printf '%s\n' "$values" | tail -n 1)
+	total=$(
+		varnishncsa -F '%{VSL:Timestamp:Process[2]}x' |
+		sort |
+		tee "$TMP_DIR/values" |
+		wc -l
+	)
+	slowest=$(tail -n 1 "$TMP_DIR/values")
 
-	printf '%s' "$values" |
-	uniq -c |
+	uniq -c "$TMP_DIR/values" |
 	awk '
 		BEGIN { print "$data <<EOF" }
 		{ sum += $1 }
@@ -198,6 +201,10 @@ latency() {
 	}
 	exit
 }
+
+readonly TMP_DIR=$(mktemp -d)
+
+trap 'rm -rf "$TMP_DIR"' EXIT
 
 case ${GRAPH:-latency} in
 latency)
