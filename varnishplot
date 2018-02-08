@@ -118,6 +118,10 @@ test "$NINES" -eq "$NINES" || usage "invalid number: $NINES"
 test "$NINES" -ge 3 || usage "invalid number of nines: $NINES"
 test "$NINES" -le 6 || usage "invalid number of nines: $NINES"
 
+readonly TMP_DIR=$(mktemp -d)
+
+trap 'rm -rf "$TMP_DIR"' EXIT
+
 varnishncsa() {
 	command varnishncsa -d "$N_R_OPT" "$N_R_ARG" -q "$QUERY" "$@"
 }
@@ -201,10 +205,6 @@ latency() {
 	}
 	exit
 }
-
-readonly TMP_DIR=$(mktemp -d)
-
-trap 'rm -rf "$TMP_DIR"' EXIT
 
 case ${GRAPH:-latency} in
 latency)
