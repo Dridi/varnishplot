@@ -139,7 +139,7 @@ latency() {
 
 	total=$(
 		varnishncsa -F '%{VSL:Timestamp:Process[2]}x' |
-		sort |
+		LC_ALL=C sort -n |
 		tee "$TMP_DIR/values" |
 		wc -l
 	)
