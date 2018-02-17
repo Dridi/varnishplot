@@ -158,7 +158,8 @@ latency() {
 			{ sum += $1 }
 			{ print (sum / total) "\t" $2 }
 			END { print "EOF" }
-		' total="$total"
+		' total="$total" |
+		column -t
 
 		record=$((record + 1))
 	done
