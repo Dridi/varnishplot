@@ -130,28 +130,38 @@ output() {
 	cat <<-EOF
 	set terminal png size 1280,720
 	set output '$OUTPUT'
-
 	EOF
 }
 
 latency() {
 	output
 
-	total=$(
-		varnishncsa -F '%{VSL:Timestamp:Process[2]}x' |
-		LC_ALL=C sort -n |
-		tee "$TMP_DIR/values" |
-		wc -l
-	)
-	slowest=$(tail -n 1 "$TMP_DIR/values")
+	varnishncsa -F "\
+		%{VSL:Timestamp:Process[2]}x \
+		%{VSL:Timestamp:Resp[2]}x \
+	" >"$TMP_DIR/values"
 
-	uniq -c "$TMP_DIR/values" |
-	awk '
-		BEGIN { print "$data <<EOF" }
-		{ sum += $1 }
-		{ print (sum / total) "\t" $2 }
-		END { print "EOF" }
-	' total="$total"
+	record=1
+	for data in process resp
+	do
+		total=$(
+			awk "/[^-]/ {print \$$record}" "$TMP_DIR/values" |
+			LC_ALL=C sort -n |
+			tee "$TMP_DIR/$data" |
+			wc -l
+		)
+		slowest=$(tail -n 1 "$TMP_DIR/$data")
+
+		uniq -c "$TMP_DIR/$data" |
+		awk '
+			BEGIN { print "\n$'$data' <<EOF" }
+			{ sum += $1 }
+			{ print (sum / total) "\t" $2 }
+			END { print "EOF" }
+		' total="$total"
+
+		record=$((record + 1))
+	done
 
 	cat <<-EOF
 
@@ -165,7 +175,12 @@ latency() {
 	unset key
 	EOF
 
-	plot_cmd='plot $data with lines lw 3 linecolor rgb "red"'
+	plot_cmd="plot"
+	for plot in process:blue resp:red
+	do
+		plot_style="with lines lw 3 linecolor rgb \"${plot#*:}\""
+		plot_cmd="${plot_cmd} \$${plot%:*} ${plot_style},"
+	done
 
 	head -n "$NINES" <<-EOF |
 	0.0     0.9      90%
