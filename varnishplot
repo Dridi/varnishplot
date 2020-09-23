@@ -154,7 +154,7 @@ latency() {
 
 		uniq -c "$TMP_DIR/$data" |
 		awk '
-			BEGIN { print "\n$'$data' <<EOF" }
+			BEGIN { print "\n\n$'$data' <<EOF" }
 			{ sum += $1 }
 			{ print (sum / total) "\t" $2 }
 			END { print "EOF" }
