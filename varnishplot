@@ -56,6 +56,7 @@ usage() {
 	-g <graph>   : a type of graph
 	-n <workdir> : the name or directory for the varnishd instance
 	-o <file>    : a name for the gnuplot output file
+	-q <query>   : specifies the VSL query to use
 	-r <file>    : a VSL file written with \`varnishlog -w\`
 	-9 <nines>   : number of nines for percentile graphs (default: 4)
 
