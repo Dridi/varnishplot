@@ -142,7 +142,7 @@ latency() {
 	" >"$TMP_DIR/values"
 
 	record=1
-	for data in process resp
+	for data in Process Resp
 	do
 		total=$(
 			awk "! /-/ {print \$$record}" "$TMP_DIR/values" |
@@ -173,13 +173,12 @@ latency() {
 	set rmargin 0
 	set border 7
 	set grid
-	unset key
 	EOF
 
 	plot_cmd="plot"
-	for plot in process:blue resp:red
+	for plot in Process:blue Resp:red
 	do
-		plot_style="with lines lw 3 linecolor rgb \"${plot#*:}\""
+		plot_style="with lines lw 3 linecolor rgb \"${plot#*:}\" title \"${plot%:*}\""
 		plot_cmd="${plot_cmd} \$${plot%:*} ${plot_style},"
 	done
 
@@ -203,6 +202,7 @@ latency() {
 			set border 5
 			set ytics scale 0
 			set format y ""
+			unset key
 			EOF
 			last_max=$max
 		done
