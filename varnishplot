@@ -145,7 +145,7 @@ latency() {
 	for data in process resp
 	do
 		total=$(
-			awk "/[^-]/ {print \$$record}" "$TMP_DIR/values" |
+			awk "! /-/ {print \$$record}" "$TMP_DIR/values" |
 			LC_ALL=C sort -n |
 			tee "$TMP_DIR/$data" |
 			wc -l
